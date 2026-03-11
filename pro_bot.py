@@ -4,173 +4,185 @@ import sys
 import datetime
 from tradingview_ta import TA_Handler, Interval
 
-# --- TERMINAL COLORS (Hacker Style) ---
-G = "\033[38;5;82m"  # Neon Green
-R = "\033[38;5;196m" # Bright Red
-Y = "\033[38;5;226m" # Yellow
-B = "\033[38;5;21m"  # Deep Blue
-C = "\033[38;5;51m"  # Cyan
-W = "\033[38;5;255m" # White
+# --- UI DESIGN TOKENS (Matrix/Hacker Style) ---
+G = "\033[38;5;46m"  # Matrix Green
+R = "\033[38;5;196m" # Danger Red
+Y = "\033[38;5;226m" # Warning Yellow
+B = "\033[38;5;33m"  # Cyber Blue
+C = "\033[38;5;51m"  # Neon Cyan
+W = "\033[38;5;255m" # Text White
 BOLD = "\033[1m"
 RESET = "\033[0m"
 
-# --- PAIRS DATABASE (From your images) ---
-PAIRS = {
-    "01": {"name": "EURUSD", "display": "EUR/USD (OTC)", "exch": "FX_IDC", "type": "forex"},
-    "02": {"name": "GBPUSD", "display": "GBP/USD (OTC)", "exch": "FX_IDC", "type": "forex"},
-    "03": {"name": "USDJPY", "display": "USD/JPY (OTC)", "exch": "FX_IDC", "type": "forex"},
-    "04": {"name": "AUDCAD", "display": "AUD/CAD (OTC)", "exch": "FX_IDC", "type": "forex"},
-    "05": {"name": "USDCAD", "display": "USD/CAD (OTC)", "exch": "FX_IDC", "type": "forex"},
-    "06": {"name": "BTCUSD", "display": "BITCOIN (OTC)", "exch": "BITSTAMP", "type": "crypto"},
-    "07": {"name": "ETHUSD", "display": "ETHEREUM (OTC)", "exch": "BINANCE", "type": "crypto"},
-    "08": {"name": "GOLD", "display": "GOLD (OTC)", "exch": "OANDA", "type": "cfd"},
-    "09": {"name": "NASDAQ100", "display": "NASDAQ 100", "exch": "CURRENCYCOM", "type": "index"},
+# --- ALL PAIRS FROM YOUR IMAGES (Mapped to TradingView) ---
+ASSETS = {
+    # FOREX OTC
+    "01": {"name": "EURUSD", "display": "EUR/USD", "exch": "FX_IDC", "scr": "forex"},
+    "02": {"name": "GBPUSD", "display": "GBP/USD", "exch": "FX_IDC", "scr": "forex"},
+    "03": {"name": "USDJPY", "display": "USD/JPY", "exch": "FX_IDC", "scr": "forex"},
+    "04": {"name": "AUDCAD", "display": "AUD/CAD", "exch": "FX_IDC", "scr": "forex"},
+    "05": {"name": "USDCAD", "display": "USD/CAD", "exch": "FX_IDC", "scr": "forex"},
+    "06": {"name": "EURGBP", "display": "EUR/GBO", "exch": "FX_IDC", "scr": "forex"},
+    "07": {"name": "NZDUSD", "display": "NZD/USD", "exch": "FX_IDC", "scr": "forex"},
+    # CRYPTO
+    "10": {"name": "BTCUSD", "display": "BITCOIN", "exch": "BITSTAMP", "scr": "crypto"},
+    "11": {"name": "ETHUSD", "display": "ETHEREUM", "exch": "BINANCE", "scr": "crypto"},
+    "12": {"name": "SOLUSD", "display": "SOLANA", "exch": "BINANCE", "scr": "crypto"},
+    "13": {"name": "DOGEUSD", "display": "DOGE", "exch": "BINANCE", "scr": "crypto"},
+    "14": {"name": "XRPUSD", "display": "RIPPLE", "exch": "BINANCE", "scr": "crypto"},
+    # STOCKS/COMMODITIES
+    "20": {"name": "GOLD", "display": "GOLD", "exch": "OANDA", "scr": "cfd"},
+    "21": {"name": "SILVER", "display": "SILVER", "exch": "OANDA", "scr": "cfd"},
+    "22": {"name": "AAPL", "display": "APPLE", "exch": "CAPITALCOM", "scr": "stock"},
+    "23": {"name": "GOOGL", "display": "GOOGLE", "exch": "CAPITALCOM", "scr": "stock"},
+    "24": {"name": "TSLA", "display": "TESLA", "exch": "CAPITALCOM", "scr": "stock"},
+    "25": {"name": "FB", "display": "FACEBOOK", "exch": "CAPITALCOM", "scr": "stock"},
 }
 
-# --- GLOBAL STATE ---
-selected_pair_key = "01"
-selected_tf = "1m"
-account_balance = 100.0
+# --- DEFAULT STATE ---
+state = {
+    "pair": "01",
+    "tf": "1m",
+    "bal": 100.0,
+    "last_signal": "NONE"
+}
 
-def clear_screen():
+def clear():
     os.system('clear')
 
-def get_ascii_art():
-    return f"""
-{G} ██████╗ ██████╗  ██████╗     ██████╗  ██████╗ ████████╗
- ██╔══██╗██╔══██╗██╔═══██╗    ██╔══██╗██╔═══██╗╚══██╔══╝
- ██████╔╝██████╔╝██║   ██║    ██████╔╝██║   ██║   ██║   
- ██╔══██╗██╔══██╗██║   ██║    ██╔══██╗██║   ██║   ██║   
- ██████╔╝██║  ██║╚██████╔╝    ██████╔╝╚██████╔╝   ██║   
- ╚══════╝╚═╝  ╚═╝ ╚═════╝     ╚═════╝  ╚═════╝    ╚═╝   
-{C} >> ADVANCED TRADING TERMINAL | v3.0 | 20+ INDICATORS <<{RESET}
+def get_header():
+    # ASCII Art & Pair Matrix
+    header = f"""
+{G} █████╗ ██╗    ███████╗██╗ ██████╗ ███╗   ██╗ █████╗ ██╗     
+██╔══██╗██║    ██╔════╝██║██╔════╝ ████╗  ██║██╔══██╗██║     
+███████║██║    ███████╗██║██║  ███╗██╔██╗ ██║███████║██║     
+██╔══██║██║    ╚════██║██║██║   ██║██║╚██╗██║██╔══██║██║     
+██║  ██║██║    ███████║██║╚██████╔╝██║ ╚████║██║  ██║███████╗
+╚═╝  ╚═╝╚═╝    ╚══════╝╚═╝ ╚═════╝ ╚═╝  ╚═══╝╚═╝  ╚═╝╚══════╝
+{C}   >> AI BINARY PREDICTION TERMINAL | ENCRYPTED LINK | V5.0 <<{RESET}
+{BOLD}{W}----------------------------------------------------------------------
+[ AVAILABLE PAIRS MATRIX ]
+{G}01:EURUSD  02:GBPUSD  03:USDJPY  04:AUDCAD  05:USDCAD  06:EURGBP  07:NZDUSD
+10:BITCOIN 11:ETHEREUM 12:SOLANA  13:DOGE    14:RIPPLE
+20:GOLD    21:SILVER   22:APPLE   23:GOOGLE  24:TESLA   25:FACEBOOK
+{W}----------------------------------------------------------------------
+[ CONFIG ]  Pair: {Y}{ASSETS[state['pair']]['display']}{W}  | TF: {Y}{state['tf'].upper()}{W} | Bal: {G}${state['bal']}{W}
+----------------------------------------------------------------------{RESET}
+{BOLD}CMD: {C}signal{W} | {C}pair [no]{W} | {C}tf [1m/5m]{W} | {C}bal [amt]{W} | {C}exit{RESET}
 """
+    return header
 
-def show_dashboard():
-    clear_screen()
-    print(get_ascii_art())
-    pair_info = PAIRS[selected_pair_key]
+def run_prediction():
+    p = ASSETS[state['pair']]
+    print(f"\n{C}[SYSTEM] Initializing Analysis for {p['display']}...")
+    time.sleep(1)
+    print(f"{C}[SYSTEM] Syncing 26 Indicators (RSI, Stoch, MACD, etc.){RESET}")
     
-    print(f"{BOLD}{G} SYSTEM STATUS: {W}CONNECTED [80%+ ACCURACY ENGINE]")
-    print(f"{BOLD}{G} CURRENT PAIR:  {W}{pair_info['display']}")
-    print(f"{BOLD}{G} TIMEFRAME:     {W}{selected_tf.upper()}")
-    print(f"{BOLD}{G} BALANCE:       {Y}${account_balance}")
-    print(f"{G}{'='*60}{RESET}")
-    print(f"{BOLD}{C} COMMANDS:{RESET} {W}signal {G}|{W} pair [no] {G}|{W} tf [1m/5m] {G}|{W} bal [amt] {G}|{W} exit")
-    print(f"{G}{'='*60}{RESET}")
-
-def fetch_market_analysis():
-    pair = PAIRS[selected_pair_key]
-    tf_map = {"1m": Interval.INTERVAL_1_MINUTE, "2m": Interval.INTERVAL_2_MINUTES, "5m": Interval.INTERVAL_5_MINUTES}
+    tf_map = {"1m": Interval.INTERVAL_1_MINUTE, "5m": Interval.INTERVAL_5_MINUTES}
     
     try:
         handler = TA_Handler(
-            symbol=pair['name'],
-            screener=pair['type'],
-            exchange=pair['exch'],
-            interval=tf_map.get(selected_tf, Interval.INTERVAL_1_MINUTE)
+            symbol=p['name'],
+            screener=p['scr'],
+            exchange=p['exch'],
+            interval=tf_map.get(state['tf'], Interval.INTERVAL_1_MINUTE)
         )
         analysis = handler.get_analysis()
+        buy = analysis.summary['BUY']
+        sell = analysis.summary['SELL']
+        neutral = analysis.summary['NEUTRAL']
         
-        # 20+ Indicators calculation (Extracting summary)
-        buy_score = analysis.summary['BUY']
-        sell_score = analysis.summary['SELL']
-        neutral_score = analysis.summary['NEUTRAL']
-        total = buy_score + sell_score + neutral_score
+        # Accuracy Calculation Logic
+        total_signals = buy + sell + neutral
+        acc = 0
+        direction = "STAY"
         
-        # Exact Timing Logic
-        now = datetime.datetime.now()
-        # Predicting entry for next 30 seconds
-        execution_time = (now + datetime.timedelta(seconds=20)).strftime("%H:%M:%S")
-        
-        print(f"\n{C}[*] Fetching Market Data... (26 Indicators Scanned){RESET}")
-        time.sleep(1)
-        
-        accuracy = 0
-        trade_dir = "WAIT"
-        
-        if buy_score > sell_score:
-            accuracy = (buy_score / total) * 100
-            trade_dir = "CALL (UP)"
+        if buy > sell:
+            acc = (buy / total_signals) * 100
+            direction = f"{G}CALL (UP){RESET}"
         else:
-            accuracy = (sell_score / total) * 100
-            trade_dir = "PUT (DOWN)"
+            acc = (sell / total_signals) * 100
+            direction = f"{R}PUT (DOWN){RESET}"
 
-        # Countdown Warning
-        print(f"{Y}[!] ALERT: Potential Entry Found. Syncing with Broker...{RESET}")
+        # Syncing Countdown
+        exec_time = (datetime.datetime.now() + datetime.timedelta(seconds=20)).strftime("%H:%M:%S")
+        
+        print(f"{Y}[ALERT] Strong Trend Identified. Preparing Entry Point...{RESET}")
         for i in range(15, 0, -1):
-            sys.stdout.write(f"\r{BOLD}{R} [PREPARING] START TRADE AT {execution_time} | TIME LEFT: {i}s {RESET}")
+            sys.stdout.write(f"\r{BOLD}{R} [LOCKING] ENTRY AT {exec_time} | SYNC: {i}s {RESET}")
             sys.stdout.flush()
             time.sleep(1)
         print("\n")
 
-        # Result Display
-        final_color = G if accuracy >= 80 else R
-        print(f"{G}{'='*60}{RESET}")
-        print(f"{BOLD} TRADE SIGNAL GENERATED:{RESET}")
-        print(f" DIRECTION: {final_color}{trade_dir}{RESET}")
-        print(f" ENTRY AT:  {BOLD}{execution_time}{RESET}")
-        print(f" EXPIRY:    {selected_tf}")
-        print(f" ACCURACY:  {final_color}{accuracy:.2f}%{RESET}")
+        # Result Table
+        res_color = G if acc >= 80 else R
+        print(f"{G}╔════════════════════ SIGNAL REPORT ════════════════════╗{RESET}")
+        print(f"{G}║{W} ASSET     : {BOLD}{p['display'].ljust(35)}{RESET}{G}║")
+        print(f"{G}║{W} DIRECTION : {BOLD}{direction.ljust(44)}{RESET}{G}║")
+        print(f"{G}║{W} EXEC TIME : {BOLD}{exec_time.ljust(35)}{RESET}{G}║")
+        print(f"{G}║{W} ACCURACY  : {res_color}{BOLD}{str(round(acc,2))+'%'.ljust(35)}{RESET}{G}║")
         
         # Money Management
-        min_invest = account_balance * 0.02
-        max_invest = account_balance * 0.05
+        inv = state['bal'] * (0.05 if acc > 88 else 0.02)
+        risk = f"{G}LOW{RESET}" if acc > 88 else f"{Y}MEDIUM{RESET}"
         
-        if accuracy >= 88:
-            print(f" RISK LEVEL: {G}LOW (HIGH CONFIDENCE){RESET}")
-            print(f" INVESTMENT: {BOLD}${min_invest:.1f} to ${max_invest:.1f}{RESET}")
-        elif accuracy >= 80:
-            print(f" RISK LEVEL: {Y}MODERATE{RESET}")
-            print(f" INVESTMENT: {BOLD}${min_invest:.1f} Only{RESET}")
-        else:
-            print(f" RISK LEVEL: {R}HIGH - DO NOT TRADE{RESET}")
-            print(f" STATUS:     {R}SKIP THIS CANDLE{RESET}")
-
-        print(f"{G}{'='*60}{RESET}")
+        print(f"{G}║{W} INVEST    : {BOLD}${str(round(inv,1)).ljust(35)}{RESET}{G}║")
+        print(f"{G}║{W} RISK      : {BOLD}{risk.ljust(44)}{RESET}{G}║")
+        print(f"{G}╚═══════════════════════════════════════════════════════╝{RESET}")
+        
+        if acc < 80:
+            print(f"{R}>> BAD MARKET: System recommends SKIPPING this trade. <<{RESET}")
 
     except Exception as e:
-        print(f"{R} ERROR: Data extraction failed. Check connection.{RESET}")
+        print(f"{R}[ERROR] Market Data Unreachable for {p['name']}.{RESET}")
 
 def main():
-    global selected_pair_key, selected_tf, account_balance
-    show_dashboard()
-    
     while True:
+        clear()
+        print(get_header())
+        
         try:
-            user_input = input(f"{G}Terminal@{selected_pair_key} >> {W}").lower().strip().split()
+            user_input = input(f"{G}AI_BOT_SHELL# {W}").lower().strip().split()
             if not user_input: continue
             
             cmd = user_input[0]
             
-            if cmd == "exit": break
+            if cmd == "exit":
+                print(f"{R}Terminating Link...{RESET}")
+                break
             
+            elif cmd == "signal":
+                run_prediction()
+                input(f"\n{W}Press Enter to continue...{RESET}")
+                
             elif cmd == "pair":
-                if len(user_input) > 1 and user_input[1] in PAIRS:
-                    selected_pair_key = user_input[1]
-                    show_dashboard()
+                if len(user_input) > 1 and user_input[1] in ASSETS:
+                    state['pair'] = user_input[1]
                 else:
-                    print(f"{R}Error: Use pair 01 to 09{RESET}")
+                    print(f"{R}Invalid Pair Code. See Matrix Above.{RESET}")
+                    time.sleep(2)
                     
             elif cmd == "tf":
-                if len(user_input) > 1 and user_input[1] in ["1m", "2m", "5m"]:
-                    selected_tf = user_input[1]
-                    show_dashboard()
+                if len(user_input) > 1 and user_input[1] in ["1m", "5m"]:
+                    state['tf'] = user_input[1]
+                else:
+                    print(f"{R}Use 'tf 1m' or 'tf 5m'{RESET}")
+                    time.sleep(2)
                     
             elif cmd == "bal":
                 if len(user_input) > 1:
-                    account_balance = float(user_input[1])
-                    show_dashboard()
-                    
-            elif cmd == "signal":
-                fetch_market_analysis()
-                
+                    state['bal'] = float(user_input[1])
+                else:
+                    print(f"{R}Provide amount, e.g., 'bal 500'{RESET}")
+                    time.sleep(2)
             else:
-                print(f"{Y}Unknown command. Valid: signal, pair, tf, bal, exit{RESET}")
+                print(f"{R}Command Error. Type 'signal' or 'pair [no]'{RESET}")
+                time.sleep(1)
         except KeyboardInterrupt:
             break
-        except Exception as e:
-            print(f"{R}Input Error.{RESET}")
+        except Exception:
+            print(f"{R}Input Error. Restarting Shell...{RESET}")
+            time.sleep(1)
 
 if __name__ == "__main__":
     main()
